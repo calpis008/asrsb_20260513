@@ -1,0 +1,7 @@
+<PAMDataset>
+  <SRS dataAxisToSRSAxisMapping="1,2">LOCAL_CS["TWD97 / TM2 zone 121",UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
+  <GeoTransform>  2.7737000000000000e+05,  1.0000000000000000e+01,  0.0000000000000000e+00,  2.6257100000000000e+06,  0.0000000000000000e+00, -1.0000000000000000e+01</GeoTransform>
+  <Metadata domain="IMAGE_STRUCTURE">
+    <MDI key="INTERLEAVE">PIXEL</MDI>
+  </Metadata>
+</PAMDataset>

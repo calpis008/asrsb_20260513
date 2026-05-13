@@ -1,0 +1,103 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>馬太鞍溪衛星監控 (水體門檻 > 0.2)</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: sans-serif; }
+        .container { display: flex; flex-direction: column; height: 100vh; }
+        .view-pane { position: relative; flex: 1; overflow: hidden; background: #111; }
+        #pane-top { border-bottom: 4px solid #444; }
+        #map-top, #map-bottom { width: 100%; height: 100%; }
+        .resizer { height: 14px; background: #333; cursor: row-resize; z-index: 5000; display: flex; align-items: center; justify-content: center; border-top: 1px solid #555; }
+        .resizer-handle { width: 60px; height: 5px; background: #777; border-radius: 3px; }
+        .overlay-label { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.9); padding: 10px 20px; border-radius: 8px; z-index: 2000; font-weight: bold; border-left: 6px solid #00ff96; }
+        .timeline-box { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(0, 255, 150, 1); color: #000; padding: 15px 60px; border-radius: 80px; z-index: 6000; font-size: 42px; font-weight: 900; box-shadow: 0 20px 60px rgba(0,0,0,1); }
+        .playback-controls { position: absolute; bottom: 45px; right: 45px; z-index: 6000; display: flex; gap: 20px; }
+        .btn { background: #222; color: #fff; border: 2px solid #444; padding: 16px 32px; border-radius: 15px; cursor: pointer; font-size: 18px; font-weight: bold; }
+        .btn.active { color: #00ff96; border-color: #00ff96; box-shadow: 0 0 30px rgba(0,255,150,0.5); }
+        .legend { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.9); padding: 15px; border-radius: 10px; font-size: 14px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; border: 1px solid #444; }
+        .legend-item { display: flex; align-items: center; gap: 12px; }
+        .color-box { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="pane-top" class="view-pane"><div id="map-top"></div><div class="overlay-label">NDWI (彩色偵測)</div>
+            <div class="legend">
+                <div class="legend-item"><div class="color-box" style="background:#00008b"></div> 水體 (NDWI > 0.115)</div>
+                <div class="legend-item"><div class="color-box" style="background:#f5deb3"></div> 裸露地/河床 (-0.1 ~ 0.115)</div>
+                <div class="legend-item"><div class="color-box" style="background:#8b4513"></div> 乾燥陸地/植被</div>
+            </div>
+        </div>
+        <div class="resizer" id="drag-handle"><div class="resizer-handle"></div></div>
+        <div id="pane-bottom" class="view-pane"><div id="map-bottom"></div><div class="overlay-label">SWIR (短波紅外)</div></div>
+    </div>
+    <div class="timeline-box" id="current-date">載入中...</div>
+    <div class="playback-controls">
+        <button class="btn" onclick="prevStep()">◀</button>
+        <button class="btn active" id="playBtn" onclick="togglePlay()">暫停</button>
+        <button class="btn" onclick="nextStep()">▶</button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const imageData = [{"type": "NDWI", "date": "2025-06", "file": "images/S2_NDWI_2025-06.png"}, {"type": "NDWI", "date": "2025-08", "file": "images/S2_NDWI_2025-08.png"}, {"type": "NDWI", "date": "2025-09", "file": "images/S2_NDWI_2025-09.png"}, {"type": "NDWI", "date": "2025-10", "file": "images/S2_NDWI_2025-10.png"}, {"type": "NDWI", "date": "2025-11", "file": "images/S2_NDWI_2025-11.png"}, {"type": "NDWI", "date": "2025-12", "file": "images/S2_NDWI_2025-12.png"}, {"type": "NDWI", "date": "2026-01", "file": "images/S2_NDWI_2026-01.png"}, {"type": "NDWI", "date": "2026-02", "file": "images/S2_NDWI_2026-02.png"}, {"type": "NDWI", "date": "2026-03", "file": "images/S2_NDWI_2026-03.png"}, {"type": "NDWI", "date": "2026-04", "file": "images/S2_NDWI_2026-04.png"}, {"type": "SWIR", "date": "2025-06", "file": "images/S2_SWIR_2025-06.png"}, {"type": "SWIR", "date": "2025-08", "file": "images/S2_SWIR_2025-08.png"}, {"type": "SWIR", "date": "2025-09", "file": "images/S2_SWIR_2025-09.png"}, {"type": "SWIR", "date": "2025-10", "file": "images/S2_SWIR_2025-10.png"}, {"type": "SWIR", "date": "2025-11", "file": "images/S2_SWIR_2025-11.png"}, {"type": "SWIR", "date": "2025-12", "file": "images/S2_SWIR_2025-12.png"}, {"type": "SWIR", "date": "2026-01", "file": "images/S2_SWIR_2026-01.png"}, {"type": "SWIR", "date": "2026-02", "file": "images/S2_SWIR_2026-02.png"}, {"type": "SWIR", "date": "2026-03", "file": "images/S2_SWIR_2026-03.png"}, {"type": "SWIR", "date": "2026-04", "file": "images/S2_SWIR_2026-04.png"}];
+        const mapBounds = [[23.64234073241458, 121.26827794107547], [23.73451530611299, 121.49583082830867]];
+        const dates = [...new Set(imageData.map(d => d.date))].sort();
+        
+        const mapTop = L.map('map-top', { zoomControl: false }).fitBounds(mapBounds);
+        const mapBottom = L.map('map-bottom', { zoomControl: false }).fitBounds(mapBounds);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { opacity: 0.5 }).addTo(mapTop);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { opacity: 0.5 }).addTo(mapBottom);
+
+        function syncMaps(source, target) { target.setView(source.getCenter(), source.getZoom(), { animate: false }); }
+        mapTop.on('drag zoom', () => syncMaps(mapTop, mapBottom));
+        mapBottom.on('drag zoom', () => syncMaps(mapBottom, mapTop));
+
+        const resizer = document.getElementById('drag-handle'), topPane = document.getElementById('pane-top');
+        let isDragging = false;
+        resizer.addEventListener('mousedown', () => isDragging = true);
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const percentage = (e.clientY / window.innerHeight) * 100;
+            if (percentage > 10 && percentage < 90) {
+                topPane.style.flex = `0 0 ${percentage}%`;
+                mapTop.invalidateSize(); mapBottom.invalidateSize();
+            }
+        });
+        document.addEventListener('mouseup', () => isDragging = false);
+
+        let layers = { NDWI: {}, SWIR: {} };
+        imageData.forEach(item => {
+            const layer = L.imageOverlay(item.file, mapBounds, { opacity: 0, zIndex: 1000 });
+            layers[item.type][item.date] = layer;
+            layer.addTo(item.type === 'NDWI' ? mapTop : mapBottom);
+        });
+
+        let currentIndex = 0, isPlaying = true, timer = null;
+        function updateFrame() {
+            const date = dates[currentIndex];
+            document.getElementById('current-date').innerText = date;
+            for (let type in layers) {
+                for (let d in layers[type]) layers[type][d].setOpacity(0);
+                if (layers[type][date]) layers[type][date].setOpacity(1);
+            }
+        }
+        function nextStep() { currentIndex = (currentIndex + 1) % dates.length; updateFrame(); }
+        function prevStep() { currentIndex = (currentIndex - 1 + dates.length) % dates.length; updateFrame(); }
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            document.getElementById('playBtn').innerText = isPlaying ? '暫停' : '播放';
+            document.getElementById('playBtn').classList.toggle('active', isPlaying);
+            isPlaying ? startTimer() : stopTimer();
+        }
+        function startTimer() { if (timer) clearInterval(timer); timer = setInterval(nextStep, 1000); }
+        function stopTimer() { clearInterval(timer); timer = null; }
+        updateFrame(); startTimer();
+    </script>
+</body>
+</html>
+    
