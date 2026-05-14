@@ -3,24 +3,27 @@ import glob
 import json
 import subprocess
 import math
+import shutil
 
 # 設定路徑
 SRC_DIR = "/Users/miaoch/Documents/馬太鞍溪S2衛星時序監控/ASRSB_Disaster_Monitor_2026"
 PROJECT_DIR = "/Users/miaoch/Documents/claude code/Mataian_S2_Viewer"
 IMG_OUT_DIR = os.path.join(PROJECT_DIR, "images")
 
-# QGIS GDAL 工具路徑
+# QGIS GDAL 與環境變數設定
 GDAL_INFO = "/Applications/QGIS.app/Contents/MacOS/gdalinfo"
 GDAL_TRANS = "/Applications/QGIS.app/Contents/MacOS/gdal_translate"
 GDAL_DEM = "/Applications/QGIS.app/Contents/MacOS/gdaldem"
+GDAL_TILES = "/Applications/QGIS.app/Contents/MacOS/gdal2tiles.py"
+
+# 設定 PROJ 資源路徑以解決 proj.db 缺失問題
+os.environ["PROJ_LIB"] = "/Applications/QGIS.app/Contents/Resources/qgis/proj"
+os.environ["GDAL_DATA"] = "/Applications/QGIS.app/Contents/Resources/qgis/gdal"
 
 os.makedirs(IMG_OUT_DIR, exist_ok=True)
 
 def create_ndwi_color_txt():
-    """
-    建立修正後的 NDWI 彩色色階
-    水體門檻精確設定為 0.115
-    """
+    """建立修正後的 NDWI 彩色色階"""
     color_path = os.path.join(PROJECT_DIR, "ndwi_colors.txt")
     content = """
 -1.0  139  69  19
@@ -28,7 +31,7 @@ def create_ndwi_color_txt():
 -0.1  244 164  96
  0.05 245 222 179
  0.11 230 230 230
- 0.115 100 149 237   # 水體起點 (0.115)
+ 0.115 100 149 237
  0.4   30 144 255
  0.6    0   0 139
  1.0    0   0  50
@@ -66,8 +69,7 @@ def get_bounds(file_path):
         if corner:
             sw_twd, ne_twd = corner.get("lowerLeft"), corner.get("upperRight")
             return [twd97_to_wgs84(sw_twd[0], sw_twd[1]), twd97_to_wgs84(ne_twd[0], ne_twd[1])]
-    except Exception as e:
-        print(f"提取座標出錯: {e}")
+    except: pass
     return [[23.645, 121.365], [23.705, 121.435]]
 
 def build_viewer():
@@ -83,23 +85,37 @@ def build_viewer():
         png_name = name.replace(".tif", ".png")
         png_path = os.path.join(IMG_OUT_DIR, png_name)
         img_type = "NDWI" if "NDWI" in name else "SWIR"
+        date_str = name.split('_')[-1].replace(".tif", "")
         
+        # 1. 產生 PNG
         print(f"處理: {png_name}")
         if img_type == "NDWI":
             cmd = [GDAL_DEM, "color-relief", f, color_txt, png_path, "-of", "PNG"]
         else:
             cmd = [GDAL_TRANS, "-of", "PNG", "-ot", "Byte", "-scale", "-exponent", "0.6", f, png_path]
+        subprocess.run(cmd, check=True)
         
-        subprocess.run(cmd, capture_output=False, check=True)
-        date_str = name.split('_')[-1].replace(".tif", "")
-        data_list.append({"type": img_type, "date": date_str, "file": "images/" + png_name})
+        # 2. 核心優化：產生 TMS 圖磚
+        tiles_subdir = f"tiles_{img_type}_{date_str}"
+        tiles_abs_path = os.path.join(IMG_OUT_DIR, tiles_subdir)
+        
+        if not os.path.exists(tiles_abs_path):
+            print(f"[{date_str}] 切圖中...")
+            cmd_tiles = [GDAL_TILES, "-z", "12-17", "-w", "none", "-p", "mercator", png_path, tiles_abs_path]
+            subprocess.run(cmd_tiles, check=True)
+            
+        data_list.append({
+            "type": img_type, 
+            "date": date_str, 
+            "tiles": f"images/{tiles_subdir}/{{z}}/{{x}}/{{y}}.png"
+        })
 
     html_template = """
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>馬太鞍溪衛星監控 (水體門檻 > 0.2)</title>
+    <title>馬太鞍溪衛星監控 (TMS 高速版)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: sans-serif; }
@@ -168,7 +184,8 @@ def build_viewer():
 
         let layers = { NDWI: {}, SWIR: {} };
         imageData.forEach(item => {
-            const layer = L.imageOverlay(item.file, mapBounds, { opacity: 0, zIndex: 1000 });
+            // 切換為 TileLayer 以優化效能
+            const layer = L.tileLayer(item.tiles, { opacity: 0, zIndex: 1000, tms: true });
             layers[item.type][item.date] = layer;
             layer.addTo(item.type === 'NDWI' ? mapTop : mapBottom);
         });
@@ -199,7 +216,7 @@ def build_viewer():
     """
     with open(os.path.join(PROJECT_DIR, "index.html"), "w", encoding="utf-8") as f:
         f.write(html_template)
-    print(f"完成! 水體門檻已設為 > 0.115。")
+    print(f"完成! 圖磚系統已就緒，請重新執行並推送到 GitHub。")
 
 if __name__ == "__main__":
     build_viewer()

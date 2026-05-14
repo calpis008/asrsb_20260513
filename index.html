@@ -3,7 +3,7 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>馬太鞍溪衛星監控 (水體門檻 > 0.2)</title>
+    <title>馬太鞍溪衛星監控 (TMS 高速版)</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: sans-serif; }
@@ -44,7 +44,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const imageData = [{"type": "NDWI", "date": "2025-06", "file": "images/S2_NDWI_2025-06.png"}, {"type": "NDWI", "date": "2025-08", "file": "images/S2_NDWI_2025-08.png"}, {"type": "NDWI", "date": "2025-09", "file": "images/S2_NDWI_2025-09.png"}, {"type": "NDWI", "date": "2025-10", "file": "images/S2_NDWI_2025-10.png"}, {"type": "NDWI", "date": "2025-11", "file": "images/S2_NDWI_2025-11.png"}, {"type": "NDWI", "date": "2025-12", "file": "images/S2_NDWI_2025-12.png"}, {"type": "NDWI", "date": "2026-01", "file": "images/S2_NDWI_2026-01.png"}, {"type": "NDWI", "date": "2026-02", "file": "images/S2_NDWI_2026-02.png"}, {"type": "NDWI", "date": "2026-03", "file": "images/S2_NDWI_2026-03.png"}, {"type": "NDWI", "date": "2026-04", "file": "images/S2_NDWI_2026-04.png"}, {"type": "SWIR", "date": "2025-06", "file": "images/S2_SWIR_2025-06.png"}, {"type": "SWIR", "date": "2025-08", "file": "images/S2_SWIR_2025-08.png"}, {"type": "SWIR", "date": "2025-09", "file": "images/S2_SWIR_2025-09.png"}, {"type": "SWIR", "date": "2025-10", "file": "images/S2_SWIR_2025-10.png"}, {"type": "SWIR", "date": "2025-11", "file": "images/S2_SWIR_2025-11.png"}, {"type": "SWIR", "date": "2025-12", "file": "images/S2_SWIR_2025-12.png"}, {"type": "SWIR", "date": "2026-01", "file": "images/S2_SWIR_2026-01.png"}, {"type": "SWIR", "date": "2026-02", "file": "images/S2_SWIR_2026-02.png"}, {"type": "SWIR", "date": "2026-03", "file": "images/S2_SWIR_2026-03.png"}, {"type": "SWIR", "date": "2026-04", "file": "images/S2_SWIR_2026-04.png"}];
+        const imageData = [{"type": "NDWI", "date": "2025-06", "tiles": "images/tiles_NDWI_2025-06/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2025-08", "tiles": "images/tiles_NDWI_2025-08/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2025-09", "tiles": "images/tiles_NDWI_2025-09/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2025-10", "tiles": "images/tiles_NDWI_2025-10/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2025-11", "tiles": "images/tiles_NDWI_2025-11/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2025-12", "tiles": "images/tiles_NDWI_2025-12/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2026-01", "tiles": "images/tiles_NDWI_2026-01/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2026-02", "tiles": "images/tiles_NDWI_2026-02/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2026-03", "tiles": "images/tiles_NDWI_2026-03/{z}/{x}/{y}.png"}, {"type": "NDWI", "date": "2026-04", "tiles": "images/tiles_NDWI_2026-04/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2025-06", "tiles": "images/tiles_SWIR_2025-06/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2025-08", "tiles": "images/tiles_SWIR_2025-08/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2025-09", "tiles": "images/tiles_SWIR_2025-09/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2025-10", "tiles": "images/tiles_SWIR_2025-10/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2025-11", "tiles": "images/tiles_SWIR_2025-11/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2025-12", "tiles": "images/tiles_SWIR_2025-12/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2026-01", "tiles": "images/tiles_SWIR_2026-01/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2026-02", "tiles": "images/tiles_SWIR_2026-02/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2026-03", "tiles": "images/tiles_SWIR_2026-03/{z}/{x}/{y}.png"}, {"type": "SWIR", "date": "2026-04", "tiles": "images/tiles_SWIR_2026-04/{z}/{x}/{y}.png"}];
         const mapBounds = [[23.64234073241458, 121.26827794107547], [23.73451530611299, 121.49583082830867]];
         const dates = [...new Set(imageData.map(d => d.date))].sort();
         
@@ -72,7 +72,8 @@
 
         let layers = { NDWI: {}, SWIR: {} };
         imageData.forEach(item => {
-            const layer = L.imageOverlay(item.file, mapBounds, { opacity: 0, zIndex: 1000 });
+            // 切換為 TileLayer 以優化效能
+            const layer = L.tileLayer(item.tiles, { opacity: 0, zIndex: 1000, tms: true });
             layers[item.type][item.date] = layer;
             layer.addTo(item.type === 'NDWI' ? mapTop : mapBottom);
         });
